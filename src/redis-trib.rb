@@ -56,7 +56,13 @@ end
 
 class ClusterNode
     def initialize(addr)
-        s = addr.split("@")[0].split(":")
+        p = addr.split("@")
+        password = nil
+        if p.length > 1
+            password = p.shift
+            addr = p[0]
+        end
+        s = addr.split(":")
         if s.length < 2
            puts "Invalid IP or Port (given as #{addr}) - use IP:Port format"
            exit 1
@@ -71,6 +77,7 @@ class ClusterNode
         @info[:migrating] = {}
         @info[:importing] = {}
         @info[:replicate] = false
+        @info[:password] = password
         @dirty = false # True if we need to flush slots info into node.
         @friends = []
     end
@@ -96,7 +103,7 @@ class ClusterNode
         print "Connecting to node #{self}: " if $verbose
         STDOUT.flush
         begin
-            @r = Redis.new(:host => @info[:host], :port => @info[:port], :timeout => 60)
+            @r = Redis.new(:host => @info[:host], :port => @info[:port], :timeout => 60, :password => @info[:password])
             @r.ping
         rescue
             xputs "[ERR] Sorry, can't connect to node #{self}"
@@ -831,7 +838,11 @@ class RedisTrib
             next if f[:flags].index("noaddr") ||
                     f[:flags].index("disconnected") ||
                     f[:flags].index("fail")
-            fnode = ClusterNode.new(f[:addr])
+            addr = f[:addr]
+            if node.info[:password]
+                addr = "#{node.info[:password]}@#{addr}"
+            end
+            fnode = ClusterNode.new(addr)
             fnode.connect()
             next if !fnode.r
             begin
